@@ -1,6 +1,5 @@
 package com.yammer.metrics.reporting;
 
-import com.yammer.metrics.core.MetricsRegistry;
 import com.yammer.metrics.core.*;
 
 import javax.management.*;
@@ -15,278 +14,9 @@ import java.util.concurrent.TimeUnit;
 public class JmxReporter implements Runnable {
     private final ScheduledExecutorService tickThread;
     private final MetricsRegistry metricsRegistry;
+    private final Map<Class<?>, MetricToMBeanConverter<?>> converters;
     private final Map<MetricName, MetricMBean> beans;
     private final MBeanServer server;
-
-    public static interface MetricMBean {
-        public ObjectName objectName();
-    }
-
-    public static abstract class AbstractBean implements MetricMBean {
-        private final ObjectName objectName;
-
-        protected AbstractBean(ObjectName objectName) {
-            this.objectName = objectName;
-        }
-
-        @Override
-        public ObjectName objectName() {
-            return objectName;
-        }
-    }
-
-    public static interface GaugeMBean extends MetricMBean {
-        public Object getValue();
-    }
-
-    public static class Gauge extends AbstractBean implements GaugeMBean {
-        private final GaugeMetric<?> metric;
-
-        public Gauge(GaugeMetric<?> metric, ObjectName objectName) {
-            super(objectName);
-            this.metric = metric;
-        }
-
-        @Override
-        public Object getValue() {
-            return metric.value();
-        }
-    }
-
-    public static interface CounterMBean extends MetricMBean {
-        public long getCount();
-    }
-
-    public static class Counter extends AbstractBean implements CounterMBean {
-        private final CounterMetric metric;
-
-        public Counter(CounterMetric metric, ObjectName objectName) {
-            super(objectName);
-            this.metric = metric;
-        }
-
-        @Override
-        public long getCount() {
-            return metric.count();
-        }
-    }
-
-    public static interface MeterMBean extends MetricMBean {
-        public long getCount();
-        public String getEventType();
-        public TimeUnit getRateUnit();
-        public double getMeanRate();
-        public double getOneMinuteRate();
-        public double getFiveMinuteRate();
-        public double getFifteenMinuteRate();
-    }
-
-    public static class Meter extends AbstractBean implements MeterMBean {
-        private final Metered metric;
-
-        public Meter(Metered metric, ObjectName objectName) {
-            super(objectName);
-            this.metric = metric;
-        }
-
-        @Override
-        public long getCount() {
-            return metric.count();
-        }
-
-        @Override
-        public String getEventType() {
-            return metric.eventType();
-        }
-
-        @Override
-        public TimeUnit getRateUnit() {
-            return metric.rateUnit();
-        }
-
-        @Override
-        public double getMeanRate() {
-            return metric.meanRate();
-        }
-
-        @Override
-        public double getOneMinuteRate() {
-            return metric.oneMinuteRate();
-        }
-
-        @Override
-        public double getFiveMinuteRate() {
-            return metric.fiveMinuteRate();
-        }
-
-        @Override
-        public double getFifteenMinuteRate() {
-            return metric.fifteenMinuteRate();
-        }
-    }
-
-    public static interface HistogramMBean extends MetricMBean {
-        public long getCount();
-        public double getMin();
-        public double getMax();
-        public double getMean();
-        public double getStdDev();
-        public double get50thPercentile();
-        public double get75thPercentile();
-        public double get95thPercentile();
-        public double get98thPercentile();
-        public double get99thPercentile();
-        public double get999thPercentile();
-        public List<?> values();
-    }
-
-    public static class Histogram implements HistogramMBean {
-        private final ObjectName objectName;
-        private final HistogramMetric metric;
-
-        public Histogram(HistogramMetric metric, ObjectName objectName) {
-            this.metric = metric;
-            this.objectName = objectName;
-        }
-
-        @Override
-        public ObjectName objectName() {
-            return objectName;
-        }
-
-        @Override
-        public double get50thPercentile() {
-            return metric.percentiles(0.5)[0];
-        }
-
-        @Override
-        public long getCount() {
-            return metric.count();
-        }
-
-        @Override
-        public double getMin() {
-            return metric.min();
-        }
-
-        @Override
-        public double getMax() {
-            return metric.max();
-        }
-
-        @Override
-        public double getMean() {
-            return metric.mean();
-        }
-
-        @Override
-        public double getStdDev() {
-            return metric.stdDev();
-        }
-
-        @Override
-        public double get75thPercentile() {
-            return metric.percentiles(0.75)[0];
-        }
-
-        @Override
-        public double get95thPercentile() {
-            return metric.percentiles(0.95)[0];
-        }
-
-        @Override
-        public double get98thPercentile() {
-            return metric.percentiles(0.98)[0];
-        }
-
-        @Override
-        public double get99thPercentile() {
-            return metric.percentiles(0.99)[0];
-        }
-
-        @Override
-        public double get999thPercentile() {
-            return metric.percentiles(0.999)[0];
-        }
-
-        @Override
-        public List<?> values() {
-            return metric.values();
-        }
-    }
-
-    public static interface TimerMBean extends MeterMBean, HistogramMBean {
-        public TimeUnit getLatencyUnit();
-    }
-
-    public static class Timer extends Meter implements TimerMBean {
-        private final TimerMetric metric;
-
-        public Timer(TimerMetric metric, ObjectName objectName) {
-            super(metric, objectName);
-            this.metric = metric;
-        }
-
-        @Override
-        public double get50thPercentile() {
-            return metric.percentiles(0.5)[0];
-        }
-
-        @Override
-        public TimeUnit getLatencyUnit() {
-            return metric.durationUnit();
-        }
-
-        @Override
-        public double getMin() {
-            return metric.min();
-        }
-
-        @Override
-        public double getMax() {
-            return metric.max();
-        }
-
-        @Override
-        public double getMean() {
-            return metric.mean();
-        }
-
-        @Override
-        public double getStdDev() {
-            return metric.stdDev();
-        }
-
-        @Override
-        public double get75thPercentile() {
-            return metric.percentiles(0.75)[0];
-        }
-
-        @Override
-        public double get95thPercentile() {
-            return metric.percentiles(0.95)[0];
-        }
-
-        @Override
-        public double get98thPercentile() {
-            return metric.percentiles(0.98)[0];
-        }
-
-        @Override
-        public double get99thPercentile() {
-            return metric.percentiles(0.99)[0];
-        }
-
-        @Override
-        public double get999thPercentile() {
-            return metric.percentiles(0.999)[0];
-        }
-
-        @Override
-        public List<?> values() {
-            return metric.values();
-        }
-    }
 
     private static JmxReporter INSTANCE;
     public static final void startDefault(MetricsRegistry defaultMetricsRegistry) {
@@ -299,8 +29,18 @@ public class JmxReporter implements Runnable {
         this.metricsRegistry = metricsRegistry;
         this.beans = new HashMap<MetricName, MetricMBean>(metricsRegistry.allMetrics().size());
         this.server = ManagementFactory.getPlatformMBeanServer();
+        this.converters = new HashMap<Class<?>, MetricToMBeanConverter<?>>();
+        this.converters.put(CounterMetric.class, new CounterMetricToMBeanConverter());
+        this.converters.put(GaugeMetric.class, new GaugeMetricToMBeanConverter());
+        this.converters.put(MeterMetric.class, new MeterMetricToMBeanConverter());
+        this.converters.put(TimerMetric.class, new TimerMetricToMBeanConverter());
+        this.converters.put(HistogramMetric.class, new HistogramMetricToMBeanConverter());
     }
 
+    public <T extends Metric> void registerConverter(Class<T> metricType, MetricToMBeanConverter<T> converter) {
+        converters.put(metricType, converter);
+    }
+    
     public void start() {
         tickThread.scheduleAtFixedRate(this, 0, 1, TimeUnit.MINUTES);
         // then schedule the tick thread every 100ms for the next second so
@@ -311,6 +51,7 @@ public class JmxReporter implements Runnable {
         }
     }
 
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     @Override
     public void run() {
         final Set<MetricName> newMetrics = new HashSet<MetricName>(metricsRegistry.allMetrics().keySet());
@@ -321,16 +62,10 @@ public class JmxReporter implements Runnable {
             if (metric != null) {
                 try {
                     final ObjectName objectName = new ObjectName(name.getMBeanName());
-                    if (metric instanceof GaugeMetric) {
-                        registerBean(name, new Gauge((GaugeMetric<?>) metric, objectName), objectName);
-                    } else if (metric instanceof CounterMetric) {
-                        registerBean(name, new Counter((CounterMetric) metric, objectName), objectName);
-                    } else if (metric instanceof HistogramMetric) {
-                        registerBean(name, new Histogram((HistogramMetric) metric, objectName), objectName);
-                    } else if (metric instanceof MeterMetric) {
-                        registerBean(name, new Meter((MeterMetric) metric, objectName), objectName);
-                    } else if (metric instanceof TimerMetric) {
-                        registerBean(name, new Timer((TimerMetric) metric, objectName), objectName);
+                    final MetricToMBeanConverter converter = findConverter(metric.getClass());
+
+                    if (converter != null) {
+                        registerBean(name, converter.createMBean(metric, objectName), objectName);
                     }
                 } catch (Exception ignored) {
                 }
@@ -338,9 +73,28 @@ public class JmxReporter implements Runnable {
         }
     }
 
+    private MetricToMBeanConverter<?> findConverter(Class<?> type) {
+        MetricToMBeanConverter<?> converter = null;
+
+        if (type != null) {
+            converter = converters.get(type);
+            if (converter == null) {
+                converter = findConverter(type.getSuperclass());
+            }
+            if (converter == null) {
+                for (Class<?> baseInterface : type.getInterfaces()) {
+                    converter = findConverter(baseInterface);
+                    if (converter != null) {
+                        break;
+                    }
+                }
+            }
+        }
+        return converter;
+    }
+    
     private void registerBean(MetricName name, MetricMBean bean, ObjectName objectName) throws MBeanRegistrationException, InstanceAlreadyExistsException, NotCompliantMBeanException {
         beans.put(name, bean);
         server.registerMBean(bean, objectName);
     }
-
 }
