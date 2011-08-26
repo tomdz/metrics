@@ -418,8 +418,17 @@ public class MetricsRegistry {
         return new ConcurrentHashMap<MetricName, Metric>();
     }
 
+    /**
+     * Adds a new metric under the given name if there is none registered for it yet,
+     * otherwise returns the already registered metric.
+     *
+     * @param name the metric name
+     * @param metric the new metric object
+     * @return either the existing metric for that name or the given new metric if
+     *         no metric had been registered under that name yet
+     */
     @SuppressWarnings("unchecked")
-    private <T extends Metric> T getOrAdd(MetricName name, T metric) {
+    public <T extends Metric> T getOrAdd(MetricName name, T metric) {
         final Metric existingMetric = metrics.get(name);
         if (existingMetric == null) {
             final Metric justAddedMetric = metrics.putIfAbsent(name, metric);
