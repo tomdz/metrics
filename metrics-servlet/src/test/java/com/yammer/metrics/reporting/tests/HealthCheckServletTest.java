@@ -3,6 +3,7 @@ package com.yammer.metrics.reporting.tests;
 import com.yammer.metrics.core.HealthCheck;
 import com.yammer.metrics.core.HealthCheckRegistry;
 import com.yammer.metrics.reporting.HealthCheckServlet;
+import com.yammer.metrics.reporting.HealthChecksPlainTextRenderer;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
@@ -25,7 +26,7 @@ import static org.mockito.Mockito.*;
 
 public class HealthCheckServletTest {
     private final HealthCheckRegistry registry = mock(HealthCheckRegistry.class);
-    private final HealthCheckServlet servlet = new HealthCheckServlet(registry);
+    private final HealthCheckServlet servlet = new HealthCheckServlet(registry, new HealthChecksPlainTextRenderer());
     private final SortedMap<String, HealthCheck.Result> results = new TreeMap<String, HealthCheck.Result>();
 
     private final HttpServletRequest request = mock(HttpServletRequest.class);

@@ -27,24 +27,27 @@ public class HealthCheckServlet extends HttpServlet {
      * The attribute name of the {@link HealthCheckRegistry} instance in the servlet context.
      */
     public static final String REGISTRY_ATTRIBUTE = HealthCheckServlet.class.getName() + ".registry";
-    private static final String CONTENT_TYPE = "text/plain";
 
     private HealthCheckRegistry registry;
+    private final HealthChecksRenderer renderer;
 
     /**
      * Creates a new {@link HealthCheckServlet} with the given {@link HealthCheckRegistry}.
      *
      * @param registry    a {@link HealthCheckRegistry}
+     * @param renderer    the {@link HealthChecksRenderer} to use to generate the response body
      */
-    public HealthCheckServlet(HealthCheckRegistry registry) {
+    public HealthCheckServlet(HealthCheckRegistry registry, HealthChecksRenderer renderer) {
         this.registry = registry;
+        this.renderer = renderer;
     }
 
     /**
-     * Creates a new {@link HealthCheckServlet} with the default {@link HealthCheckRegistry}.
+     * Creates a new {@link HealthCheckServlet} with the default {@link HealthCheckRegistry} and
+     * {@link HealthChecksPlainTextRenderer}.
      */
     public HealthCheckServlet() {
-        this(HealthChecks.defaultRegistry());
+        this(HealthChecks.defaultRegistry(), new HealthChecksPlainTextRenderer());
     }
 
     @Override
@@ -54,46 +57,22 @@ public class HealthCheckServlet extends HttpServlet {
             this.registry = (HealthCheckRegistry) o;
         }
     }
-
+    
     @Override
     protected void doGet(HttpServletRequest req,
                          HttpServletResponse resp) throws ServletException, IOException {
         final Map<String, HealthCheck.Result> results = registry.runHealthChecks();
-        resp.setContentType(CONTENT_TYPE);
+        resp.setContentType(renderer.getContentType());
         resp.setHeader("Cache-Control", "must-revalidate,no-cache,no-store");
         final PrintWriter writer = resp.getWriter();
         if (results.isEmpty()) {
             resp.setStatus(HttpServletResponse.SC_NOT_IMPLEMENTED);
-            writer.println("! No health checks registered.");
+        } else if (isAllHealthy(results)) {
+            resp.setStatus(HttpServletResponse.SC_OK);
         } else {
-            if (isAllHealthy(results)) {
-                resp.setStatus(HttpServletResponse.SC_OK);
-            } else {
-                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            }
-            for (Map.Entry<String, HealthCheck.Result> entry : results.entrySet()) {
-                final HealthCheck.Result result = entry.getValue();
-                if (result.isHealthy()) {
-                    if (result.getMessage() != null) {
-                        writer.format("* %s: OK\n  %s\n", entry.getKey(), result.getMessage());
-                    } else {
-                        writer.format("* %s: OK\n", entry.getKey());
-                    }
-                } else {
-                    if (result.getMessage() != null) {
-                        writer.format("! %s: ERROR\n!  %s\n", entry.getKey(), result.getMessage());
-                    }
-
-                    @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
-                    final Throwable error = result.getError();
-                    if (error != null) {
-                        writer.println();
-                        error.printStackTrace(writer);
-                        writer.println();
-                    }
-                }
-            }
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
+        renderer.render(writer, results);
         writer.close();
     }
 

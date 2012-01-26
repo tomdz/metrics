@@ -19,6 +19,7 @@ public class AdminServletProvider implements Provider<AdminServlet> {
     private final String pingUri;
     private final String threadsUri;
     private JsonFactory jsonFactory;
+    private HealthChecksRenderer renderer;
 
     @Inject
     public AdminServletProvider(Set<HealthCheck> healthChecks,
@@ -35,11 +36,17 @@ public class AdminServletProvider implements Provider<AdminServlet> {
         this.pingUri = pingUri;
         this.threadsUri = threadsUri;
         this.healthChecks = healthChecks;
+        this.renderer = new HealthChecksPlainTextRenderer();
     }
 
     @Inject(optional = true)
     public void setJsonFactory(@Named("AdminServlet.JSON_FACTORY") JsonFactory jsonFactory) {
         this.jsonFactory = jsonFactory;
+    }
+
+    @Inject(optional = true)
+    public void setHealthCheckRenderer(@Named("AdminServlet.HEALTHCHECK_RENDERER") HealthChecksPlainTextRenderer renderer) {
+        this.renderer = renderer;
     }
 
     @Override
@@ -50,7 +57,7 @@ public class AdminServletProvider implements Provider<AdminServlet> {
 
         final JsonFactory factory = jsonFactory == null ? new JsonFactory(new ObjectMapper()) : jsonFactory;
 
-        return new AdminServlet(new HealthCheckServlet(healthCheckRegistry),
+        return new AdminServlet(new HealthCheckServlet(healthCheckRegistry, renderer),
                                 new MetricsServlet(Clock.defaultClock(),
                                                    VirtualMachineMetrics.getInstance(),
                                                    metricsRegistry, factory, true),
