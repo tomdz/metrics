@@ -1,35 +1,37 @@
 package com.yammer.metrics.reporting.tests;
 
-import com.yammer.metrics.core.HealthCheck;
-import com.yammer.metrics.core.HealthCheckRegistry;
-import com.yammer.metrics.reporting.HealthCheckServlet;
-import com.yammer.metrics.reporting.HealthChecksJsonRenderer;
-import com.yammer.metrics.reporting.HealthChecksPlainTextRenderer;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-
-import javax.servlet.ServletConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
-
-import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion;
+import org.codehaus.jackson.type.TypeReference;
+import org.hamcrest.Matcher;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import com.yammer.metrics.core.HealthCheck;
+import com.yammer.metrics.core.HealthCheckRegistry;
+import com.yammer.metrics.reporting.HealthCheckServlet;
+import com.yammer.metrics.reporting.HealthChecksJsonRenderer;
 
 public class HealthCheckServletJsonTest {
     private final HealthCheckRegistry registry = mock(HealthCheckRegistry.class);
@@ -56,41 +58,50 @@ public class HealthCheckServletJsonTest {
 
         servlet.service(request, response);
 
-        Map<String, Object> expected = new LinkedHashMap<String, Object>();
+        Map<String, Object> expected = new HashMap<String, Object>();
 
-        assertThat(output.toString(),
-                   is(mapper.writeValueAsString(expected)));
+        assertThat(mapper.readValue(output.toString(), new TypeReference<HashMap<String, Object>>(){}),
+                   equalTo((Object)expected));
 
         verify(response).setStatus(501);
         verify(response).setContentType("application/json");
     }
 
     @Test
+    @SuppressWarnings({ "unchecked" })
     public void returnsOkIfAllHealthChecksAreHealthy() throws Exception {
         results.put("one", HealthCheck.Result.healthy());
         results.put("two", HealthCheck.Result.healthy("msg"));
 
         servlet.service(request, response);
 
-        Map<String, Object> expected = new LinkedHashMap<String, Object>();
-        Map<String, Object> one = new LinkedHashMap<String, Object>();
-        Map<String, Object> two = new LinkedHashMap<String, Object>();
+        Map<String, Object> result = mapper.readValue(output.toString(), new TypeReference<HashMap<String, Object>>(){});
 
-        one.put("healthy", true);
-        two.put("healthy", true);
-        two.put("message", "msg");
-        expected.put("one", one);
-        expected.put("two", two);
+        assertThat(result.size(),
+                   is(2));
+        assertThat(result,
+                   hasKey("one"));
+        assertThat(result,
+                   hasKey("two"));
 
-        assertThat(output.toString(),
-                   is(mapper.writeValueAsString(expected)));
+        Map<String, ? extends Object> resultForOne = (Map<String, ? extends Object>)result.get("one");
+        Map<String, ? extends Object> resultForTwo = (Map<String, ? extends Object>)result.get("two");
+
+        assertThat(resultForOne,
+                   allOf(hasEntry("healthy", Boolean.TRUE),
+                         not(hasKey("message")),
+                         not(hasKey("error"))));
+        assertThat(resultForTwo,
+                   allOf(hasEntry("healthy", Boolean.TRUE),
+                         hasEntry("message", "msg"),
+                         not(hasKey("error"))));
 
         verify(response).setStatus(200);
         verify(response).setContentType("application/json");
     }
 
     @Test
-    @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
+    @SuppressWarnings({ "ThrowableResultOfMethodCallIgnored", "rawtypes", "unchecked" })
     public void returnsServerErrorIfHealthChecksAreUnhealthy() throws Exception {
         IOException theEx = null;
         try {
@@ -105,34 +116,50 @@ public class HealthCheckServletJsonTest {
 
         servlet.service(request, response);
 
-        Map<String, Object> expected = new LinkedHashMap<String, Object>();
-        Map<String, Object> one = new LinkedHashMap<String, Object>();
-        Map<String, Object> two = new LinkedHashMap<String, Object>();
-        Map<String, Object> exMap = new LinkedHashMap<String, Object>();
-        List<Map<String, Object>> exElements = new ArrayList<Map<String,Object>>(theEx.getStackTrace().length); 
+        Map<String, Object> result = mapper.readValue(output.toString(), new TypeReference<HashMap<String, Object>>(){});
 
-        for (StackTraceElement element : theEx.getStackTrace()) {
-            Map<String, Object> elementMap = new LinkedHashMap<String, Object>();
-            elementMap.put("methodName", element.getMethodName());
-            elementMap.put("fileName", element.getFileName());
-            elementMap.put("lineNumber", element.getLineNumber());
-            elementMap.put("className", element.getClassName());
-            elementMap.put("nativeMethod", element.isNativeMethod());
-            exElements.add(elementMap);
+        assertThat(result.size(),
+                   is(2));
+        assertThat(result,
+                   hasKey("one"));
+        assertThat(result,
+                   hasKey("two"));
+
+        Map<String, ? extends Object> resultForOne = (Map<String, ? extends Object>)result.get("one");
+        Map<String, ? extends Object> resultForTwo = (Map<String, ? extends Object>)result.get("two");
+
+        assertThat(resultForOne,
+                   allOf(hasEntry("healthy", Boolean.FALSE),
+                         hasEntry("message", "msg"),
+                         not(hasKey("error"))));
+        assertThat(resultForTwo,
+                   allOf(hasEntry("healthy", Boolean.FALSE),
+                         hasEntry("message", "Oh no"),
+                         hasKey("error")));
+
+        Map<String, ? extends Object> resultForError = (Map<String, ? extends Object>)resultForTwo.get("error");
+
+        assertThat(resultForError,
+                   allOf(hasEntry("message", theEx.getMessage()),
+                         hasEntry("localizedMessage", theEx.getLocalizedMessage()),
+                         hasKey("stackTrace")));
+
+        List resultStackTrace = (List)resultForError.get("stackTrace");
+
+        assertThat(resultStackTrace.size(),
+                   is(theEx.getStackTrace().length));
+
+        for (int idx = 0; idx < theEx.getStackTrace().length; idx++) {
+            StackTraceElement expectedElement = theEx.getStackTrace()[idx];
+            // need to use raw types, otherwise the compiler will freak out
+            Matcher matcher = allOf(expectedElement.getClassName() == null ? not(hasKey("className")) : hasEntry("className", expectedElement.getClassName()),
+                                    expectedElement.getFileName() == null ? not(hasKey("fileName")) : hasEntry("fileName", expectedElement.getFileName()),
+                                    hasEntry("lineNumber", expectedElement.getLineNumber()),
+                                    expectedElement.getMethodName() == null ? not(hasKey("methodName")) : hasEntry("methodName", expectedElement.getMethodName()),
+                                    hasEntry("nativeMethod", expectedElement.isNativeMethod()));
+
+            assertThat(resultStackTrace.get(idx), matcher);
         }
-        exMap.put("stackTrace", exElements);
-        exMap.put("message", theEx.getMessage());
-        exMap.put("localizedMessage", theEx.getLocalizedMessage());
-        one.put("healthy", false);
-        one.put("message", "msg");
-        two.put("healthy", false);
-        two.put("message", "Oh no");
-        two.put("error", exMap);
-        expected.put("one", one);
-        expected.put("two", two);
-
-        assertThat(output.toString(),
-                   is(mapper.writeValueAsString(expected)));
 
         verify(response).setStatus(500);
         verify(response).setContentType("application/json");
